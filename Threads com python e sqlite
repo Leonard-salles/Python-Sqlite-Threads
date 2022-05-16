@@ -1,0 +1,285 @@
+import sqlite3
+import datetime
+from datetime import datetime
+# import _thread
+import threading
+import time
+import random
+
+idf = 1
+
+
+def injetar_informacao():
+    data_hora = datetime.now()
+    cont = 0
+    frutas = ['Banana', 'Maca', 'Goiaba', 'Maracuja', 'Limao', 'Pera', 'Tanjerina', 'Melancia', 'Manga', 'Uva', 'Melao']
+    sinal = threading.Semaphore(1)
+    con = sqlite3.connect('fila.db')
+    cur = con.cursor()
+    lock = threading.Lock()
+    print(str(datetime.now()) + " FUNCAO Insere dados INICIO DA EXECUCAO")
+    while cont < 5:
+        cont += 1
+        try:
+            if lock.acquire() == True:
+                lock.release()
+            elif sinal.acquire() == True:
+                sinal.release()
+            sinal.acquire()
+            lock.acquire(blocking=True, timeout=1)
+            lock.locked()
+            cur.execute(f'insert into entrada select id, "{random.choice(frutas)}", "em fila'
+                        f'" , "teste", "{data_hora}" from id_fila;')
+            con.commit()
+            lock.release()
+            sinal.release()
+            print(f'inseriu a {cont} informação')
+
+
+        except sqlite3.OperationalError:
+            try:
+                print('\033[31m'+'não foi possivel inserir informações no banco' + '\033[0;0m')
+                print('a thread voltará em 1s')
+                time.sleep(1)
+                lock.release()
+                injetar_Informacao.run()
+                print('A thread voltou')
+                time.sleep(0.2)
+
+            except RuntimeError:
+                injetar_Informacao.run()
+                print('A thread voltou')
+
+        if cont == 5:
+            time.sleep(0.3)
+            cont = 0
+
+
+# trasnferir dados pra outra trabela
+
+
+def transferir_dados():
+    sinal = threading.Semaphore(1)
+    con = sqlite3.connect('fila.db')
+    cur = con.cursor()
+    lock = threading.Lock()
+    hora = datetime.now()
+    n_aleatorio = [1, 2, 3]
+    cont = 0
+
+    print(str(datetime.now()) + " FUNCAO Transfere dados Inicio DA EXECUCAO")
+    while True:
+        cont += 1
+        try:
+            cur.execute("select * from entrada;")
+            for row in cur:  # verifica se foi inserido algum dado na tabela entrada
+                if row[0] == 1:  # verifica se tem algum dado na tabela entrada onde o id_fila = 1 se for começa trasnferir pra outra tabela
+                    # time.sleep(1)
+                    sinal.acquire(blocking=True)
+                    lock.acquire(blocking=True, timeout=1)
+                    lock.locked()
+                    cur.execute(
+                        f'INSERT INTO saida SELECT id, funcao, status_funcao, id_funcao,"{random.choice(n_aleatorio)}", "{hora}"'
+                        f'FROM entrada where status_funcao = "em fila" ')
+                    con.commit()
+                    lock.release()
+                    sinal.release()
+        except sqlite3.OperationalError:
+            try:
+                print('\033[31m'+'não foi possivel transferir os dados' + '\033[0;0m')
+                print('a thread voltará em 1s')
+                time.sleep(1)
+                lock.release()
+                transferir_Dados.run()
+                print('A thread voltou')
+
+
+            except RuntimeError:
+                transferir_Dados.run()
+                print('A thread voltou')
+
+        if cont == 5:
+            print(f'foi transferida as  informações')
+            print(str(datetime.now()) + " FUNCAO transfere dados fim DA EXECUCAO")
+            cont = 0
+            time.sleep(0.25)
+
+
+def consumidor_1():
+    sinal = threading.Semaphore(1)
+    con = sqlite3.connect('fila.db')
+    cur = con.cursor()
+    lock = threading.Lock()
+    atl = con.cursor()
+    while True:
+        print(str(datetime.now()) + " Consumidor 1 Inicio DA EXECUCAO")
+        try:
+            global idf
+            for row in cur.execute('select id from entrada where id = 1;'):
+                if row[0] == 1:  # and row[2] == "em processamento":
+                    if lock.acquire() == True:
+                        lock.release()
+                    elif sinal.acquire() == True:
+                        sinal.release()
+                    cur.execute("select * from saida;")
+                    for row in cur:
+                        if row[0] == 1:
+                            print(f' id que o consumidor 1 vai  usar {idf}')
+                            sinal.acquire()
+                            lock.acquire(blocking=True, timeout=1)
+                            cur.execute(
+                                f'update saida set status_funcao = "Sucesso", id_consumidor = 1 where id = {idf};')
+                            atl.execute('select status_funcao from saida where status_funcao =  "em fila";')
+                            for row in atl:
+                                cur.execute(
+                                    f'update saida set status_funcao = "Sucesso", id_consumidor = 1 where status_funcao = "em fila"  and id = {idf - 1};')
+                               
+                            con.commit()
+                            lock.release()
+                            sinal.release()
+                            idf += 1
+                            print("consumidor 1 inseriu com sucesso")
+                           
+
+        except sqlite3.OperationalError:
+            try:
+                print('\033[31m' + 'não foi possivel consumidor 1 conectar agora' + '\033[0;0m')
+                print('a thread voltará em 1s')
+                time.sleep(1)
+                lock.release()
+                consumidor1.run()
+                time.sleep(0.2)
+
+
+            except RuntimeError:
+                consumidor1.run()
+                print('A thread voltou')
+
+        print(str(datetime.now()) + " Consumidor 1 Fim DA EXECUCAO")
+        time.sleep(0.35)
+
+
+def consumidor_2():
+    sinal = threading.Semaphore(1)
+    con = sqlite3.connect('fila.db')
+    cur = con.cursor()
+    lock = threading.Lock()
+    atl = con.cursor()
+    while True:
+        print(str(datetime.now()) + " Consumidor 2 Inicio DA EXECUCAO")
+        try:
+            global idf
+            cur.execute("select * from entrada;")
+            for row in cur.execute('select id from entrada where id = 1;'):
+                if row[0] == 1:  # and row[2] == "em processamento":
+                    if lock.acquire() == True:
+                        lock.release()
+                    elif sinal.acquire() == True:
+                        sinal.release()
+                    cur.execute("select * from saida;")
+                    for row in cur:
+                        if row[0] == 1:
+                            sinal.acquire(blocking=True)
+                            lock.acquire(blocking=True, timeout=1)
+                            print(f' id que o consumidor 2 vai  usar {idf}')
+                            # time.sleep(1.5)
+                            lock.locked()
+                            cur.execute(
+                                f'update saida set status_funcao = "Time out", id_consumidor = 2 where id = {idf};')
+                            atl.execute('select status_funcao from saida where status_funcao =  "em fila";')
+                            for row in atl:
+                                cur.execute(
+                                    f'update saida set status_funcao = "Time out", id_consumidor = 2  where status_funcao = "em fila"  and id = {idf - 1};')
+                                # print(row)
+                            idf += 1
+                            print("consumidor 2 inseriu com sucesso")
+                            con.commit()
+                            lock.release()
+                            sinal.release()
+               
+        except sqlite3.OperationalError:
+            try:
+                print('\033[31m'+'não foi possivel consumidor 2 conectar agora' + '\033[0;0m')
+                print('a thread voltará em 1s')
+                time.sleep(1)
+                lock.release()
+                consumidor2.run()
+                print('A thread voltou')
+                time.sleep(0.2)
+
+            except RuntimeError:
+                consumidor2.run()
+                print('A thread voltou')
+
+        print(str(datetime.now()) + " Consumidor 2 Fim DA EXECUCAO")
+        time.sleep(0.35)
+
+
+def consumidor_3():
+    sinal = threading.Semaphore(1)
+    con = sqlite3.connect('fila.db')
+    cur = con.cursor()
+    lock = threading.Lock()
+    atl = con.cursor()
+    while True:
+        print(str(datetime.now()) + " Consumidor 3 Inicio DA EXECUCAO")
+        try:
+            global idf
+            cur.execute("select * from entrada;")
+            for row in cur.execute('select id from entrada where id = 1;'):
+                if row[0] == 1:  # and row[2] == "em processamento":
+                    if lock.acquire() == True:
+                        lock.release()
+                    elif sinal.acquire() == True:
+                        sinal.release()
+                    cur.execute("select * from saida;")
+                    for row in cur:
+                        if row[0] == 1:
+                            sinal.acquire(blocking=True)
+                            lock.acquire(blocking=True, timeout=1)
+                            print(f' id que o consumidor 3 vai  usar {idf}')
+                            # time.sleep(1.5)
+                            lock.locked()
+                            cur.execute(
+                                f'update saida set status_funcao = "Erro", id_consumidor = 3 where id = {idf};')
+                            atl.execute('select status_funcao from saida where status_funcao =  "em fila";')
+                            for row in atl:
+                                cur.execute(
+                                    f'update saida set status_funcao = "Erro", id_consumidor = 3  where status_funcao = "em fila"  and id = {idf - 1};')
+                                # print(row)
+                            idf += 1
+                            print("consumidor 3 inseriu com sucesso")
+                            con.commit()
+                            lock.release()
+                            sinal.release()
+                            # time.sleep(1)
+
+        except sqlite3.OperationalError:
+            try:
+                print('\033[31m'+'não foi possivel consumidor 3 conectar agora' + '\033[0;0m')
+                print('a thread voltará em 1s')
+                time.sleep(1)
+                lock.release()
+                consumidor3.run()
+                print('A thread voltou')
+                time.sleep(0.2)
+
+            except RuntimeError:
+                consumidor3.run()
+                print('A thread voltou')
+
+        print(str(datetime.now()) + " Consumidor 3 Fim DA EXECUCAO")
+        time.sleep(0.35)
+
+
+injetar_Informacao = threading.Thread(target=injetar_informacao)
+transferir_Dados = threading.Thread(target=transferir_dados)
+consumidor1 = threading.Thread(target=consumidor_1)
+consumidor2 = threading.Thread(target=consumidor_2)
+consumidor3 = threading.Thread(target=consumidor_3)
+
+consumidor1.start()
+consumidor2.start()
+consumidor3.start()
+injetar_Informacao.start()
+transferir_Dados.start()
